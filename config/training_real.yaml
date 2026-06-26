@@ -1,0 +1,193 @@
+##################### Dataset Options #####################
+data_dir: './e2e_dataset/'   # real： './e2e_dataset/'  carla ./e2e_parking/'
+#########################real dataset########################
+training_dir: "train"
+validation_dir: "val"
+
+future_frame_nums: 4
+hist_frame_nums: 10
+
+##################### 1. History / Attention Ablation Options #####################
+# History usage: if using historical trajectory information in training/inference
+use_history: true
+# Length of history (frames) to provide to the model (keep consistent with hist_frame_nums)
+history_len: 3
+# GRU hidden dim for history encoder (if use_history true)
+history_hidden_dim: 64
+# Optional: project history encoder output to this dim; if null/omitted, defaults to tf_de_dim
+history_out_dim: null
+# Whether to include history features in the decoder's cross-attention memory (True) or keep history
+# encoded but not attended (False). Useful for ablation studies.
+history_use_attention: true
+
+
+# 2.  Decoder attention ablation flags. Set to false to disable the corresponding attention stage for
+# ablation experiments.
+# If false, cross-attention between target/camera/history and decoder queries is disabled.
+decoder_use_cross_attention: true
+# If false, per-stream self-attention inside x/y branches is disabled.
+decoder_use_self_attention: true
+# If false, the final fusion self-attention after concatenation of x/y features is disabled.
+decoder_use_fusion_self_attention: true
+
+##################### Basic Options #####################
+data_mode: "real_scene"
+num_gpus: 1
+cuda_device_index: "0"
+log_root_dir: './log/'
+checkpoint_root_dir: './ckpt'
+log_every_n_steps: 10
+check_val_every_n_epoch: 5
+epochs: 40  # 155for carla dataset ./e2e_parking   40-real
+learning_rate: 0.0001   # 0.000075 (7.5*10) for carla dataset paper in 2025 (enhancec E2EPakring dataset)
+weight_decay: 0.00001   #
+batch_size: 32
+num_workers: 48
+# resume_path: ""
+
+##################### Data Process #####################
+autoregressive_points: 30
+traj_downsample_stride: 3
+item_number: 2
+token_nums: 1200
+append_token: 3
+xy_max: 12 #m
+process_dim: [256, 256]
+
+##################### BEV Encoder #####################
+bev_encoder_in_channel: 64
+bev_x_bound: [-10.0, 10.0, 0.1]
+bev_y_bound: [-10.0, 10.0, 0.1]
+bev_z_bound: [-10.0, 10.0, 20.0]
+d_bound: [0.5, 12.5, 0.25]
+final_dim: [256, 256]
+bev_down_sample: 8
+backbone: "efficientnet-b4"
+
+##################### Target #####################
+add_noise_to_target: true
+target_noise_threshold: 0.5
+target_range: 1.4
+use_fuzzy_target: false
+# 3. Target BEV distribution settings
+# target_dist: distribution used to create the target BEV map. Options: 'binary' (original hard square),
+# 'gaussian' (default, smooth Gaussian kernel), or 'mog' (mixture-of-gaussians, not implemented by default).
+# For this project we use 'gaussian' by default. Change to 'binary' to restore previous behavior.
+target_dist: 'gaussian'
+# If using Gaussian target, sigma (in pixels) controls spread. Reasonable default: 2.0
+# If not provided, code will fall back to a heuristic computed from target_range and bev resolution.
+target_sigma_pixels: 2.0
+
+##################### BEV Query #####################
+fusion_method: "query"
+query_en_dim: 256
+query_en_heads: 4
+query_en_layers: 4
+query_en_dropout: 0.05
+query_en_bev_length: 256
+
+# 4. Dynamic Query Pruner (optional)
+# When enabled, the pruner computes relevance scores between target encoding and
+# camera BEV spatial locations and either softly weights features or hard-prunes
+# low-importance positions before the fusion/decoder stage.
+# Use in combination with cfg tuning to trade compute vs. accuracy.
+
+# Options:
+#  - use_query_pruner (bool): enable/disable the module.
+#  - query_prune_soft (bool): if true, apply soft weighting (default). If false, keep only top-k locations and zero others.
+#  - query_prune_topk (int): keep exactly top-k locations (hard prune). If set, overrides query_prune_ratio.
+#  - query_prune_ratio (float 0..1): alternatively keep top (ratio * total_locations) locations (hard prune).
+#  - query_prune_temperature (float): temperature parameter for softmax when computing weights (default 1.0).
+use_query_pruner: false
+query_prune_soft: true
+query_prune_topk: 50
+query_prune_ratio: 0.1
+query_prune_temperature: 1.0
+
+##################### Decoder #####################
+decoder_method: "transformer"
+tf_de_dim: 256
+tf_de_heads: 4
+tf_de_layers: 4
+tf_de_dropout: 0.05
+
+##################### Segmentation/Depth options #####################
+# For datasets without seg/depth labels (e.g., e2e_dataset), set these to false
+use_segmentation: false
+seg_loss_weight: 1.0
+use_depth: false
+depth_loss_weight: 1.0
+
+
+#####################5.  Kinematics / Smoothness Loss (A) #####################
+# These options enable lightweight kinematics-inspired auxiliary losses computed from
+# the model's predicted trajectory points. They are intended for low-speed parking
+# scenarios to encourage smooth, physically plausible trajectories.
+# - use_smoothness_loss: penalizes large accelerations (second differences) along the trajectory.
+# - smoothness_loss_weight: weight applied to the smoothness loss (when not using learnable weights).
+# - use_curvature_loss: penalizes high curvature (sharp turns) estimated from successive headings.
+# - curvature_loss_weight: weight applied to the curvature loss (when not using learnable weights).
+# - use_learnable_loss_weights: if true, the training will learn per-loss uncertainty scalars
+#   (Kendall et al.) instead of using the fixed weights above.
+use_smoothness_loss: true
+smoothness_loss_weight: 1
+use_curvature_loss: false
+curvature_loss_weight: 1
+# Learnable weights (Kendall) - recommended to keep False for initial experiments
+use_learnable_loss_weights: false
+
+# ---------------- Learnable-weights & warmup (safety options) ----------------
+learnable_log_sigma_init: 0.0
+learnable_log_sigma_min: -1.0
+learnable_log_sigma_max: 1.0
+
+use_aux_loss_warmup: false
+aux_warmup_epochs: 140
+aux_warmup_multiplier: 5
+learnable_warmup: true
+
+################################################################################
+##################### 7. Reinforcement Learning fine-tune options #####################
+# If `use_rl_finetune` is true, after behaviour cloning pretraining we run a policy
+# fine-tuning stage using the RL algorithm specified below. Default is false so existing
+# BC-only workflow is unchanged.
+use_rl_finetune: false
+# rl_algorithm: 'pg' (simple policy gradient). Can be extended to 'ppo' later.
+rl_algorithm: 'pg'
+# Environment name used by RL scripts (e.g., 'carla' or 'mock')
+rl_env: 'carla'
+# total RL timesteps (approx) to collect for fine-tuning
+# (temp small value for smoke test; change back to 10000 for full runs)
+rl_timesteps: 200
+# number of RL epochs / outer loops
+rl_epochs: 10
+# rollout length per episode
+rl_rollout_length: 200
+# optimization batch size for RL updates
+rl_batch_size: 32
+# learning rate for RL optimizer
+rl_lr: 1e-5
+# discount factor
+rl_gamma: 0.99
+# During RL fine-tune, if true only decoder parameters are updated (safer)
+rl_train_decoder_only: true
+# path to save RL fine-tuned checkpoint
+rl_save_path: './ckpt/rl_finetuned.ckpt'
+
+#####################！！ 7.1 Offline RL (dataset-only) ！！#####################
+# Enable offline RL as an option during training (adds a policy-gradient loss on sampled trajectories).
+use_offline_rl: true
+# Weight for offline RL loss added to BC loss
+offline_rl_weight: 0.1
+# Reward type: 'l2' uses negative L2 distance between sampled trajectory and GT
+offline_rl_reward: 'l2'
+# Reward scale before normalization
+offline_rl_reward_scale: 1.0
+# Normalize advantage per batch
+offline_rl_adv_normalize: true
+
+##################### 8.Encoder Interactive Attention Options #####################
+# Whether to use the interactive attention mechanism in the encoder
+use_interactive_attention: true
+# Whether to enable the convolutional layer + group normalization + activation after GRU
+use_conv_gn_activation: true

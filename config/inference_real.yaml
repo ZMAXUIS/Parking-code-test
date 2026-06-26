@@ -1,0 +1,7 @@
+model_ckpt_path: "/your-path/ckpt/exp_2026_4_14_15_8_37/last.ckpt"
+training_config: "training_real"
+predict_mode: "topic"
+
+trajectory_pub_frequency: 1
+cam_info_dir: "./utils"
+progress_threshold: 0.97
